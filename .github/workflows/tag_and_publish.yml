@@ -58,7 +58,7 @@ jobs:
           generator: python
           openapi-file: openapi.json
           config-file: configs.json
-          output-dir: src
+          output-dir: "."
           command-args: "--skip-validate-spec"
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
@@ -67,7 +67,6 @@ jobs:
       - name: Install dependencies
         run: |
           ls .
-          cd src
           pip install --upgrade setuptools wheel twine build
           python -m build
           twine check dist/*
