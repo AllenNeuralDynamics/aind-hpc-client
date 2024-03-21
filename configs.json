@@ -1,5 +1,4 @@
 {
    "packageName": "aind_hpc_client",
-   "generateSourceCodeOnly": true,
    "packageVersion": "0.0.2"
 }
