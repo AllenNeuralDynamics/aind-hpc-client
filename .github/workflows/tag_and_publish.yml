@@ -53,7 +53,7 @@ jobs:
       - name: Pull latest changes
         run: git pull origin main
       - name: Generate code
-        uses: hatamiarash7/openapi-generator@v0.2.0
+        uses: hatamiarash7/openapi-generator@v0.3.0
         with:
           generator: python
           openapi-file: openapi.json
