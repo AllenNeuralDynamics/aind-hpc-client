@@ -46,7 +46,7 @@ jobs:
         git tag v${{ env.VERSION }}
         git push origin v${{ env.VERSION }}
   publish:
-    needs: tag
+    needs: bump-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
