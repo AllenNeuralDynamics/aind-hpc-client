@@ -1,64 +1,100 @@
 # aind-hpc-client
 
 [![License](https://img.shields.io/badge/license-MIT-brightgreen)](LICENSE)
-![Code Style](https://img.shields.io/badge/code%20style-black-black)
 [![semantic-release: angular](https://img.shields.io/badge/semantic--release-angular-e10079?logo=semantic-release)](https://github.com/semantic-release/semantic-release)
-![Interrogate](https://img.shields.io/badge/interrogate-100.0%25-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen?logo=codecov)
 ![Python](https://img.shields.io/badge/python->=3.7-blue?logo=python)
 
+### Usage
 
+```python
+from aind_hpc_client import ApiClient as Client
+from aind_hpc_client import Configuration as Config
+from aind_hpc_client.api.slurm_api import SlurmApi
+from aind_hpc_client.models.v0036_job_submission import V0036JobSubmission
+from aind_hpc_client.models.v0036_job_properties import V0036JobProperties
 
-## Usage
- - To use this template, click the green `Use this template` button and `Create new repository`.
- - After github initially creates the new repository, please wait an extra minute for the initialization scripts to finish organizing the repo.
- - To enable the automatic semantic version increments: in the repository go to `Settings` and `Collaborators and teams`. Click the green `Add people` button. Add `svc-aindscicomp` as an admin. Modify the file in `.github/workflows/tag_and_publish.yml` and remove the if statement in line 10. The semantic version will now be incremented every time a code is committed into the main branch.
- - To publish to PyPI, enable semantic versioning and uncomment the publish block in `.github/workflows/tag_and_publish.yml`. The code will now be published to PyPI every time the code is committed into the main branch.
- - The `.github/workflows/test_and_lint.yml` file will run automated tests and style checks every time a Pull Request is opened. If the checks are undesired, the `test_and_lint.yml` can be deleted. The strictness of the code coverage level, etc., can be modified by altering the configurations in the `pyproject.toml` file and the `.flake8` file.
+host = "http://slurm/api"
+username = "*****"  # Change this
+# Ideally, the password and access_token are set as secrets and read in using a secrets manager
+password = "*****"  # Change this
+access_token = "*****"  # Change this
+config = Config(host=host, password=password, username=username, access_token=access_token)
+slurm = SlurmApi(Client(config))
+slurm.api_client.set_default_header(header_name='X-SLURM-USER-NAME', header_value=username)
+slurm.api_client.set_default_header(header_name='X-SLURM-USER-PASSWORD', header_value=password)
+slurm.api_client.set_default_header(header_name='X-SLURM-USER-TOKEN', header_value=access_token)
 
-## Installation
-To use the software, in the root directory, run
-```bash
-pip install -e .
+command_str = [
+            "#!/bin/bash",
+            "\necho",
+            "'Hello World?'",
+            "&&",
+            "sleep",
+            "120",
+            "&&",
+            "echo",
+            "'Example json string'",
+            "&&",
+            "echo",
+            "'",
+            '{"input_source":"/path/to/directory","output_directory":"/path/to/another_directory"}',
+            "'",
+            "&&",
+            "echo",
+            "'Goodbye!'"
+        ]
+script = " ".join(command_str)
+
+hpc_env = {"PATH": "/bin:/usr/bin/:/usr/local/bin/", "LD_LIBRARY_PATH": "/lib/:/lib64/:/usr/local/lib",}
+
+job_props = V0036JobProperties(
+  partition = "aind",  # Change this if needed
+  name = "test_job1",
+  environment = hpc_env,
+  standard_out = "/path/for/logs/test_job1.out",  # Change this
+  standard_error = "/path/for/logs/test_job1_error.out",  # Change this
+  memory_per_cpu = 500,
+  tasks = 1,
+  minimum_cpus_per_node = 1,
+  nodes = [1, 1],
+  time_limit = 5  # In minutes
+)
+
+job_submission = V0036JobSubmission(script=script, job=job_props)
+submit_response = slurm.slurmctld_submit_job_0(v0036_job_submission=job_submission)
+job_id = submit_response.job_id
+job_response = slurm.slurmctld_get_job_0(job_id=submit_response.job_id)
+print(job_response.jobs[0].job_state)
 ```
 
-To develop the code, run
+## Installation
+The code is automatically generated using openapi tools and the specification from slurm.
+
+### To get the specification from slurm
 ```bash
-pip install -e .[dev]
+curl -s -H X-SLURM-USER-NAME:$SLURM_USER_NAME \
+ -H X-SLURM-USER-PASSWORD:$SLURM_USER_PASSWORD \
+ -H X-SLURM-USER-TOKEN:$SLURM_USER_TOKEN \
+ -X GET 'http://slurm/api/openapi/v3' > openapi.json
+```
+
+### Update schema
+The original specification has some validation issues, so the output is modified. The changes are tracked in `schema_changes.json`.
+
+### To create the python code, openapi tools is used. `generateSourceCodeOnly` in `configs.json` can be set to `False` to generate tests and additional files.
+```bash
+docker run --rm \
+  -u "$(id -u):$(id -g)" \
+  -v ${PWD}:/local openapitools/openapi-generator-cli generate \
+  --skip-validate-spec \
+  --config /local/configs.json \
+  -i /local/openapi.json \
+  -g python \
+  -o /local/src
 ```
 
 ## Contributing
-
-### Linters and testing
-
-There are several libraries used to run linters, check documentation, and run tests.
-
-- Please test your changes using the **coverage** library, which will run the tests and log a coverage report:
-
-```bash
-coverage run -m unittest discover && coverage report
-```
-
-- Use **interrogate** to check that modules, methods, etc. have been documented thoroughly:
-
-```bash
-interrogate .
-```
-
-- Use **flake8** to check that code is up to standards (no unused imports, etc.):
-```bash
-flake8 .
-```
-
-- Use **black** to automatically format the code into PEP standards:
-```bash
-black .
-```
-
-- Use **isort** to automatically sort import statements:
-```bash
-isort .
-```
+We can update the openapi.json specification if validation errors are raised.
 
 ### Pull requests
 
@@ -87,14 +123,3 @@ The table below, from [semantic release](https://github.com/semantic-release/sem
 | `fix(pencil): stop graphite breaking when too much pressure applied`                                                                                                                             | ~~Patch~~ Fix Release, Default release                                                                          |
 | `feat(pencil): add 'graphiteWidth' option`                                                                                                                                                       | ~~Minor~~ Feature Release                                                                                       |
 | `perf(pencil): remove graphiteWidth option`<br><br>`BREAKING CHANGE: The graphiteWidth option has been removed.`<br>`The default graphite width of 10mm is always used for performance reasons.` | ~~Major~~ Breaking Release <br /> (Note that the `BREAKING CHANGE: ` token must be in the footer of the commit) |
-
-### Documentation
-To generate the rst files source files for documentation, run
-```bash
-sphinx-apidoc -o doc_template/source/ src 
-```
-Then to create the documentation HTML files, run
-```bash
-sphinx-build -b html doc_template/source/ doc_template/build/html
-```
-More info on sphinx installation can be found [here](https://www.sphinx-doc.org/en/master/usage/installation.html).
