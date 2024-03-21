@@ -3,77 +3,63 @@ on:
   push:
     branches:
       - main
-# Remove line 61 to enable automated semantic version bumps.
-# Change line 67 from "if: false" to "if: true" to enable PyPI publishing. 
-# Requires that svc-aindscicomp be added as an admin to repo.
 jobs:
-  update_badges:
+  bump-version:
+    name: Bump version
     runs-on: ubuntu-latest
-    continue-on-error: true
+    outputs:
+      new_version: ${{ steps.output_version.outputs.new_version }}
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v3
       with:
-        ref: ${{ env.DEFAULT_BRANCH }}
+        ref: ${{ inputs.default_branch }}
         fetch-depth: 0
         token: ${{ secrets.SERVICE_TOKEN }}
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v3
+    - name: Compute new version number
+      id: tag_version
+      uses: mathieudutour/github-tag-action@v6.1
       with:
-        python-version: 3.8
-    - name: Install dependencies
-      run: | 
-        python -m pip install -e .[dev] --no-cache-dir
-    - name: Get Python version and Update README.md
+        github_token: ${{ secrets.SERVICE_TOKEN }}
+        release_branches: ${{ inputs.default_branch }}
+        default_bump: patch
+        dry_run: true  # Perform dryrun first to calculate new version
+    - name: Get version file name set variables
       run: |
-        python_version=$(grep "requires-python" pyproject.toml | grep -o ">=[^\"]*")
-        python_badge=$(grep -o 'python-[^)]*' README.md)
-        new_python_badge="python-$python_version-blue?logo=python"
-        sed -i "s/$python_badge/$new_python_badge/g" README.md
-    - name: Get interrogate values and Update README.md
+        config_file="configs.json"
+        echo "VERSION_FILE=$config_file" >> "$GITHUB_ENV"
+        echo "VERSION=${{ steps.tag_version.outputs.new_version }}" >> "$GITHUB_ENV"
+    - name: Update version file with new version
       run: |
-        interrogate_val=$(interrogate . | grep -o 'actual: [0-9]*\.[0-9]*' | awk '{print $2}')
-        interrogate_badge=$(grep -o 'interrogate-[^)]*' README.md)
-        if (( $(echo "$interrogate_val >= 90.00" | bc -l) )); then
-            new_interrogate_badge="interrogate-$interrogate_val%25-brightgreen"
-        elif (( $(echo "$interrogate_val < 80.00" | bc -l) )); then
-            new_interrogate_badge="interrogate-$interrogate_val%25-red"
-        else
-            new_interrogate_badge="interrogate-$interrogate_val%25-yellow"
-        fi
-        sed -i "s/$interrogate_badge/$new_interrogate_badge/g" README.md
-    - name: Get Coverage values and Update README.md
-      run: |
-        coverage run -m unittest discover
-        coverage_val=$(coverage report | grep "^TOTAL" | grep -o '[0-9]\+%' | grep -o '[0-9]\+')
-        coverage_badge=$(grep -o "coverage-[^?]*" README.md)
-        if (( $(echo "$coverage_val >= 90.00" | bc -l) )); then 
-            new_coverage_badge="coverage-$coverage_val%25-brightgreen"
-        elif (( $(echo "$coverage_val < 80.00" | bc -l) )); then
-            new_coverage_badge="coverage-$coverage_val%25-red"
-        else
-            new_coverage_badge="coverage-$coverage_val%25-yellow"
-        fi
-        sed -i "s/$coverage_badge/$new_coverage_badge/g" README.md
-    - name: Commit changes
+        sed -i --debug --expression="s|\"packageVersion\".*|\"packageVersion\": \"${{ env.VERSION }}\"|" "$VERSION_FILE"
+    - name: Set output
+      id: output_version
+      run: echo "new_version=${{ env.VERSION }}" >> "$GITHUB_OUTPUT"
+    - name: Commit and Push version bump
       uses: EndBug/add-and-commit@v9
       with:
         default_author: github_actions
-        message: "ci: update badges [skip actions]"
-        add: '["README.md"]'
-  tag:
-    needs: update_badges
-    if: ${{github.event.repository.name == 'aind-library-template'}}
-    uses: AllenNeuralDynamics/aind-github-actions/.github/workflows/tag.yml@main
-    secrets:
-      SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
+        message: "ci: version bump [skip actions]"
+        add: ${{ env.VERSION_FILE }}
+    - name: Update tag
+      run: |
+        git tag v${{ env.VERSION }}
+        git push origin v${{ env.VERSION }}
   publish:
     needs: tag
-    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Pull latest changes
         run: git pull origin main
+      - name: Generate code
+        uses: hatamiarash7/openapi-generator@v0.2.0
+        with:
+          generator: python
+          openapi-file: openapi.json
+          config-file: configs.json
+          output-dir: src
+          command-args: "--skip-validate-spec"
       - name: Set up Python 3.8
         uses: actions/setup-python@v2
         with:
